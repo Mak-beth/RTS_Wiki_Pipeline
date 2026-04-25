@@ -52,6 +52,13 @@ proof of the zero-copy claim.
 `TrackingAllocator`. This would give clean per-thread measurement without requiring a single-threaded
 runtime. Not implemented in this version due to re-entrancy complexity in `GlobalAlloc` implementations.
 
+The async pipeline audit achieves 100% zero-allocation by running under
+a `current_thread` Tokio runtime during measurement. This serialises all
+tasks, eliminating cross-task counter noise. The production pipeline uses
+a multi-thread runtime. The audit proves that `parse_event` itself makes
+zero heap allocations — it does not prove the production multi-threaded
+runtime has zero allocations globally.
+
 ## Network Fault Simulation
 
 Fault injection uses a controllable local mock server (not OS-level `Disable-NetAdapter`),
