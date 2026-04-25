@@ -1,0 +1,16 @@
+=== Allocation Audit Report ===
+
+Claim under test:
+  'Zero additional heap allocations during the parsing stage'
+  (The SSE library's initial String allocation is excluded — it is
+   outside the zero-copy boundary and is not counted here.)
+
+Total parse calls measured : 2728
+Calls with 0 allocs        : 2728
+Zero-allocation percentage : 100.0%
+Mean allocs per parse      : 0.000
+Max allocs in one parse    : 0
+Mean bytes allocated       : 0.0
+
+RESULT: PASS (100.0% >= 95% threshold)
+The zero-copy parsing claim is quantitatively supported.

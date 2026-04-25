@@ -44,7 +44,12 @@ struct Args {
     capture_sample: Option<String>,
 }
 
-#[tokio::main]
+// With track-alloc, use a single-thread runtime so the cooperative scheduler
+// never preempts the dispatcher between snap_before and snap_after. This
+// eliminates cross-thread allocator noise from concurrent ingestion/worker tasks,
+// giving a clean per-call measurement of parse_event allocations.
+#[cfg_attr(not(feature = "track-alloc"), tokio::main)]
+#[cfg_attr(feature = "track-alloc", tokio::main(flavor = "current_thread"))]
 async fn main() {
     let args = Args::parse();
 

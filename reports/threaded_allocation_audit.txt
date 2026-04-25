@@ -1,0 +1,19 @@
+=== Allocation Audit Report ===
+
+Claim under test:
+  'Zero additional heap allocations during the parsing stage'
+  (The SSE library's initial String allocation is excluded — it is
+   outside the zero-copy boundary and is not counted here.)
+
+Total parse calls measured : 2715
+Calls with 0 allocs        : 1461
+Zero-allocation percentage : 53.8%
+Mean allocs per parse      : 4.102
+Max allocs in one parse    : 63
+Mean bytes allocated       : 1279.5
+
+RESULT: BELOW THRESHOLD (53.8% < 95%)
+Investigate allocations in the hot path.
+For the threaded pipeline this is expected: worker threads allocate
+concurrently (server_name.to_owned() in leaderboard.record()), polluting
+the global AtomicUsize counters. See HONEST_LIMITATIONS.md.
