@@ -1,0 +1,27 @@
+[package]
+name    = "benches"
+version = "0.1.0"
+edition = "2021"
+
+[[bench]]
+name    = "parsing"
+path    = "benches/parsing.rs"
+harness = false
+
+[[bench]]
+name    = "leaderboard"
+path    = "benches/leaderboard_contention.rs"
+harness = false
+
+[[bench]]
+name    = "e2e_latency"
+path    = "benches/end_to_end_latency.rs"
+harness = false
+
+[dependencies]
+rts_core    = { path = "../rts_core" }
+parking_lot = { workspace = true }
+dashmap     = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
