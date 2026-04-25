@@ -1,10 +1,13 @@
 use crate::event::WikiEvent;
 use thiserror::Error;
 
+/// Errors that can occur when parsing a raw SSE payload.
 #[derive(Debug, Error)]
 pub enum ParseError {
+    /// The JSON was syntactically invalid or a required field had the wrong type.
     #[error("json parse error: {0}")]
     JsonError(#[from] serde_json::Error),
+    /// A structurally valid JSON object was missing a required field.
     #[error("missing required field")]
     MissingField,
 }
@@ -12,9 +15,14 @@ pub enum ParseError {
 /// Deserialise a [`WikiEvent`] from a borrowed JSON string.
 ///
 /// All string fields in the returned event point directly into `buf` —
-/// serde_json's borrowed deserialization path produces `&str` slices that
+/// serde_json's borrowed deserialisation path produces `&str` slices that
 /// alias the source bytes, so **zero additional heap allocation** occurs
 /// during parsing of string data.
+///
+/// # Errors
+///
+/// Returns [`ParseError::JsonError`] if the input is not valid JSON or if a
+/// required field is missing or has an incompatible type.
 #[inline]
 pub fn parse_event<'a>(buf: &'a str) -> Result<WikiEvent<'a>, ParseError> {
     let event: WikiEvent<'a> = serde_json::from_str(buf)?;

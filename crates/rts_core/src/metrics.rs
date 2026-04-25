@@ -3,22 +3,31 @@ use serde_json::{json, Value};
 use std::time::Instant;
 
 /// Timing data collected for a single processed event.
+///
+/// All `Instant` fields are recorded on the fast path and later aggregated
+/// by the metrics sink into HDR histograms.
 #[derive(Debug, Clone)]
 pub struct LatencySample {
     /// Moment the raw SSE bytes were received from the network layer.
     pub ingest_time: Instant,
-    /// Moment the event was dequeued and processing began.
+    /// Moment the event was dequeued from the priority channel and processing began.
     pub dequeue_time: Instant,
-    /// Moment processing completed.
+    /// Moment all processing (parse + leaderboard update + simulated work) completed.
     pub complete_time: Instant,
     /// The scheduled (expected) start time for this task slot.
+    /// Currently set to `dequeue_time`, making drift equivalent to processing time.
+    /// A future improvement would assign this before the event enters the queue.
     pub expected_start: Instant,
-    /// True when the edit was made by a human (not a bot).
+    /// `true` when the edit was made by a human (not a bot).
     pub was_human: bool,
 }
 
-/// Aggregates latency, drift, and processing-time measurements into HDR histograms,
-/// split by event priority so human-edit and bot-edit paths can be compared.
+/// Aggregates latency, drift, and processing-time measurements into HDR
+/// histograms, split by event priority so human-edit and bot-edit paths
+/// can be compared independently.
+///
+/// All duration values are stored in **microseconds**.  The maximum
+/// recordable value is 60 seconds (60 000 000 µs) with 3 significant figures.
 pub struct HistogramAggregator {
     e2e_latency_human:      Histogram<u64>,
     e2e_latency_bot:        Histogram<u64>,
@@ -29,6 +38,7 @@ pub struct HistogramAggregator {
 }
 
 impl HistogramAggregator {
+    /// Create a new aggregator with six empty HDR histograms.
     pub fn new() -> Self {
         let mk = || {
             Histogram::<u64>::new_with_max(60_000_000, 3)
@@ -44,7 +54,12 @@ impl HistogramAggregator {
         }
     }
 
-    /// Record one sample. All derived durations are in microseconds.
+    /// Record one [`LatencySample`] into the appropriate histograms.
+    ///
+    /// Derives three durations (all in µs):
+    /// - **e2e**: `complete_time − ingest_time`
+    /// - **drift**: `dequeue_time − expected_start` (clamped to 0 if negative)
+    /// - **processing**: `complete_time − dequeue_time`
     pub fn record(&mut self, s: &LatencySample) {
         let e2e = s.complete_time.duration_since(s.ingest_time).as_micros() as u64;
 
@@ -73,8 +88,10 @@ impl HistogramAggregator {
         }
     }
 
-    /// Return a JSON object with p50/p90/p99/p999/max/count for every histogram.
-    /// All values are in microseconds.
+    /// Serialise all six histograms to a JSON object.
+    ///
+    /// Each histogram node contains `p50`, `p90`, `p99`, `p999`, `max`,
+    /// and `count`.  All latency values are in **microseconds**.
     pub fn emit_summary(&self) -> Value {
         fn stats(h: &Histogram<u64>) -> Value {
             json!({

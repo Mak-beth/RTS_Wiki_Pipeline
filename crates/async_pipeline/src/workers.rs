@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, Mutex};
 
 /// Multiple human-worker tasks share the same channel receiver via
-/// Arc<Mutex<Receiver>>.  Each worker locks, receives one item, releases the
+/// `Arc<Mutex<Receiver>>`.  Each worker locks, receives one item, releases the
 /// lock, then processes the item without holding the lock — so all workers
 /// can receive concurrently once the previous item has been dequeued.
 pub async fn run_human_worker(
