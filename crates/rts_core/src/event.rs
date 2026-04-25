@@ -14,7 +14,7 @@ pub struct WikiEvent<'a> {
     pub wiki: &'a str,
     #[serde(borrow)]
     pub title: &'a str,
-    pub timestamp: i64,
+    pub timestamp: Option<i64>,
     #[serde(rename = "type", borrow)]
     pub event_type: &'a str,
 }

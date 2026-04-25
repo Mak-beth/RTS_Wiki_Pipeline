@@ -63,7 +63,7 @@ mod tests {
         assert_eq!(event.server_name, "en.wikipedia.org");
         assert_eq!(event.wiki,        "enwiki");
         assert_eq!(event.title,       "Test Article");
-        assert_eq!(event.timestamp,   1_700_000_000);
+        assert_eq!(event.timestamp,   Some(1_700_000_000));
         assert_eq!(event.event_type,  "edit");
     }
 

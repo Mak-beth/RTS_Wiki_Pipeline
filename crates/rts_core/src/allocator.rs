@@ -11,9 +11,6 @@ static ALLOC_BYTES:   AtomicUsize = AtomicUsize::new(0);
 static DEALLOC_COUNT: AtomicUsize = AtomicUsize::new(0);
 static DEALLOC_BYTES: AtomicUsize = AtomicUsize::new(0);
 
-#[global_allocator]
-static ALLOCATOR: TrackingAllocator = TrackingAllocator { inner: System };
-
 impl TrackingAllocator {
     /// Zero all counters. Call immediately before the code-under-test.
     pub fn reset() {
