@@ -7,6 +7,9 @@ edition = "2021"
 name = "async_pipeline"
 path = "src/main.rs"
 
+[features]
+track-alloc = ["rts_core/track-alloc"]
+
 [dependencies]
 rts_core           = { path = "../rts_core" }
 tokio              = { workspace = true }

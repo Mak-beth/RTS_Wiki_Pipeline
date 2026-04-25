@@ -12,6 +12,10 @@ static DEALLOC_COUNT: AtomicUsize = AtomicUsize::new(0);
 static DEALLOC_BYTES: AtomicUsize = AtomicUsize::new(0);
 
 impl TrackingAllocator {
+    pub const fn new() -> Self {
+        Self { inner: System }
+    }
+
     /// Zero all counters. Call immediately before the code-under-test.
     pub fn reset() {
         ALLOC_COUNT.store(0, Ordering::Relaxed);
