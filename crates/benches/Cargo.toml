@@ -22,6 +22,8 @@ harness = false
 rts_core    = { path = "../rts_core" }
 parking_lot = { workspace = true }
 dashmap     = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

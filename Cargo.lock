@@ -128,6 +128,8 @@ dependencies = [
  "dashmap",
  "parking_lot",
  "rts_core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
