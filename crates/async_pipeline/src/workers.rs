@@ -1,4 +1,4 @@
-use crate::state::DEADLINE_MISS_COUNT;
+use crate::state::{DEADLINE_MISS_COUNT, StressConfig};
 use rts_core::{parse_event, LatencySample, Leaderboard};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -14,6 +14,7 @@ pub async fn run_human_worker(
     chan_human:   Arc<Mutex<mpsc::Receiver<(String, Instant, Instant)>>>,
     chan_metrics: mpsc::Sender<LatencySample>,
     leaderboard:  Arc<dyn Leaderboard>,
+    stress:       Arc<StressConfig>,
 ) {
     loop {
         let item = {
@@ -26,7 +27,8 @@ pub async fn run_human_worker(
             None    => break, // sender dropped — pipeline shutting down
         };
 
-        process(raw, ingest_time, enqueue_time, true, id, &chan_metrics, &leaderboard).await;
+        process(raw, ingest_time, enqueue_time, true, id,
+                &chan_metrics, &leaderboard, &stress).await;
     }
 }
 
@@ -34,9 +36,11 @@ pub async fn run_bot_worker(
     mut chan_bot:  mpsc::Receiver<(String, Instant, Instant)>,
     chan_metrics:  mpsc::Sender<LatencySample>,
     leaderboard:   Arc<dyn Leaderboard>,
+    stress:        Arc<StressConfig>,
 ) {
     while let Some((raw, ingest_time, enqueue_time)) = chan_bot.recv().await {
-        process(raw, ingest_time, enqueue_time, false, 0, &chan_metrics, &leaderboard).await;
+        process(raw, ingest_time, enqueue_time, false, 0,
+                &chan_metrics, &leaderboard, &stress).await;
     }
 }
 
@@ -48,7 +52,25 @@ async fn process(
     worker_id:    usize,
     chan_metrics: &mpsc::Sender<LatencySample>,
     leaderboard:  &Arc<dyn Leaderboard>,
+    stress:       &Arc<StressConfig>,
 ) {
+    // ── Demo latency injection ────────────────────────────────────────────────
+    // When inside the injection window, spin-busy for 3 ms on every `every_nth`
+    // packet.  Outside the window (or when injection is disabled) the branch
+    // is a single compare against `None` — zero hot-path overhead.
+    if let Some((win_start, win_end)) = stress.inject_window {
+        let elapsed = stress.program_start.elapsed();
+        if elapsed >= win_start && elapsed < win_end {
+            let n = stress.counter.fetch_add(1, Ordering::Relaxed) + 1;
+            if n % stress.every_nth == 0 {
+                let target = Instant::now() + Duration::from_millis(3);
+                while Instant::now() < target {
+                    std::hint::spin_loop();
+                }
+            }
+        }
+    }
+
     let dequeue_time   = Instant::now();
     let expected_start = enqueue_time;
 

@@ -7,7 +7,7 @@ mod workers;
 use clap::Parser;
 use rts_core::{AtomicLeaderboard, Leaderboard, MutexLeaderboard, RwLockLeaderboard};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[cfg(feature = "track-alloc")]
 #[global_allocator]
@@ -47,6 +47,12 @@ struct Args {
     /// stream.  Produces 2000 events/second with seed 42 — identical across runs.
     #[arg(long)]
     mock: bool,
+
+    /// Run a scripted 60-second demonstration that exercises all four pipeline
+    /// phases: baseline → latency injection → stream silence → recovery.
+    /// Implies `--mock` and overrides `--duration` to 60 s.
+    #[arg(long)]
+    demo: bool,
 }
 
 // With track-alloc, use a single-thread runtime so the cooperative scheduler
@@ -103,12 +109,36 @@ async fn main() {
     let chan_human_shared =
         Arc::new(tokio::sync::Mutex::new(chan_human_rx));
 
-    // ── 5. Spawn tasks ────────────────────────────────────────────────────────
-    if args.mock {
+    // ── 5. Demo / mock config ─────────────────────────────────────────────────
+    // `--demo` implies `--mock` and overrides the run duration to 60 s.
+    let program_start = Instant::now();
+    let (run_mock, run_duration) = if args.demo {
+        (true, Duration::from_secs(60))
+    } else {
+        (args.mock, Duration::from_secs(args.duration.unwrap_or(60)))
+    };
+
+    let stress = if args.demo {
+        state::StressConfig::demo(program_start)
+    } else {
+        state::StressConfig::disabled()
+    };
+
+    // Silence window for Phase 3 (25 s – 38 s) — only active in demo mode.
+    let silence_window: Option<(Duration, Duration)> = if args.demo {
+        Some((Duration::from_secs(25), Duration::from_secs(38)))
+    } else {
+        None
+    };
+
+    // ── 6. Spawn tasks ────────────────────────────────────────────────────────
+    if run_mock {
         let eps: u64 = 2000;
-        eprintln!("[ingestion] mode = mock ({eps} eps)");
-        let dur = Duration::from_secs(args.duration.unwrap_or(60));
-        tokio::spawn(ingestion::run_mock(Arc::clone(&ring), eps, dur));
+        eprintln!("[ingestion] mode = {} ({eps} eps)",
+                  if args.demo { "demo" } else { "mock" });
+        tokio::spawn(ingestion::run_mock(
+            Arc::clone(&ring), eps, run_duration, silence_window,
+        ));
     } else {
         eprintln!("[ingestion] mode = live (stream rate)");
         tokio::spawn(ingestion::run(
@@ -133,6 +163,7 @@ async fn main() {
             Arc::clone(&chan_human_shared),
             chan_metrics_tx.clone(),
             Arc::clone(&leaderboard),
+            Arc::clone(&stress),
         ));
     }
 
@@ -140,7 +171,25 @@ async fn main() {
         chan_bot_rx,
         chan_metrics_tx.clone(),
         Arc::clone(&leaderboard),
+        Arc::clone(&stress),
     ));
+
+    // ── 7. Demo banner task ───────────────────────────────────────────────────
+    if args.demo {
+        let ts = tokio::time::Instant::now();
+        tokio::spawn(async move {
+            let banners: &[(u64, &str)] = &[
+                (0,  "[demo] Phase 1 ( 0-15s): baseline 2000 eps — expect NORMAL"),
+                (15, "[demo] Phase 2 (15-25s): injecting 3 ms spin every 20 packets — expect DEGRADED"),
+                (25, "[demo] Phase 3 (25-38s): stream silenced — mock watchdog fires at ~35s"),
+                (38, "[demo] Phase 4 (38-60s): stream resumed — expect RECOVERY → NORMAL"),
+            ];
+            for &(secs, msg) in banners {
+                tokio::time::sleep_until(ts + Duration::from_secs(secs)).await;
+                eprintln!("{msg}");
+            }
+        });
+    }
 
     tokio::spawn(metrics_sink::run(
         chan_metrics_rx,
@@ -154,14 +203,16 @@ async fn main() {
         leaderboard    = %args.leaderboard_impl,
         human_workers  = args.human_workers,
         channel_cap    = args.channel_capacity,
-        duration_secs  = ?args.duration,
+        demo           = args.demo,
+        mock           = run_mock,
+        duration_secs  = run_duration.as_secs(),
         "pipeline running"
     );
 
-    // ── 6. Wait for shutdown ──────────────────────────────────────────────────
-    if let Some(secs) = args.duration {
+    // ── 8. Wait for shutdown ──────────────────────────────────────────────────
+    if run_mock || args.duration.is_some() {
         tokio::select! {
-            _ = tokio::time::sleep(Duration::from_secs(secs)) => {
+            _ = tokio::time::sleep(run_duration) => {
                 tracing::info!(target: "shutdown", "duration elapsed");
             }
             _ = tokio::signal::ctrl_c() => {

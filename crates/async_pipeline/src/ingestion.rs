@@ -54,16 +54,54 @@ impl BoundedRing {
 ///
 /// Produces events at `events_per_second` and exits cleanly after `duration`.
 /// Uses the same ring push / overflow accounting as the live `run` function.
+///
+/// `silence_window`: if `Some((start, end))`, no events are pushed while the
+/// elapsed time is inside `[start, end)`.  After 10 s of silence the mock
+/// watchdog fires a `network_reset` log, matching the live-stream behaviour.
 pub async fn run_mock(
     ring:               Arc<BoundedRing>,
     events_per_second:  u64,
     duration:           Duration,
+    silence_window:     Option<(Duration, Duration)>,
 ) {
     let interval = Duration::from_micros(1_000_000 / events_per_second.max(1));
     let mut mock = rts_core::MockStream::new();
     let start    = Instant::now();
 
+    // Tracks when we first entered the silence window (for the mock watchdog).
+    let mut silence_enter:   Option<Instant> = None;
+    let mut watchdog_fired:  bool            = false;
+
     while start.elapsed() < duration {
+        let elapsed = start.elapsed();
+
+        // Check whether we are inside the silence window.
+        let silenced = match silence_window {
+            Some((s, e)) => elapsed >= s && elapsed < e,
+            None         => false,
+        };
+
+        if silenced {
+            // Record when silence began (first loop iteration inside window).
+            let entered = *silence_enter.get_or_insert_with(Instant::now);
+
+            // Mock watchdog: fire once after 10 s of continuous silence.
+            if !watchdog_fired && entered.elapsed() >= Duration::from_secs(10) {
+                watchdog_fired = true;
+                tracing::warn!(
+                    target: "network_reset",
+                    "mock watchdog: no events for 10 s inside silence window"
+                );
+            }
+
+            tokio::time::sleep(interval).await;
+            continue;
+        } else {
+            // Reset watchdog state once we leave the silence window.
+            silence_enter  = None;
+            watchdog_fired = false;
+        }
+
         let json        = mock.next_event();
         let ingest_time = Instant::now();
         EVENTS_INGESTED.fetch_add(1, Ordering::Relaxed);
