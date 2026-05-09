@@ -2,7 +2,7 @@ use crate::ingestion::BoundedRing;
 use crate::state::is_degraded;
 use rts_core::{parse_event, Priority};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::mpsc::Sender;
 
 pub async fn run(
@@ -63,9 +63,10 @@ pub async fn run(
                 }
             }
 
-            // Ring empty — poll again after 100 µs to avoid busy-spinning.
+            // Ring empty - yield to other tasks briefly without using
+            // tokio::time::sleep, which has a 15.6ms tick floor on Windows.
             None => {
-                tokio::time::sleep(Duration::from_micros(100)).await;
+                tokio::task::yield_now().await;
             }
         }
     }
