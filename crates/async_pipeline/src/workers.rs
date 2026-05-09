@@ -79,8 +79,13 @@ async fn process(
         leaderboard.record(event.server_name);
     }
 
-    // Simulate 100 µs of processing work.
-    tokio::time::sleep(Duration::from_micros(100)).await;
+    // Simulate 100 µs of processing work via busy-spin.
+    // Note: tokio::time::sleep on Windows has a 15.6ms tick floor,
+    // making it unsuitable for sub-millisecond real-time work.
+    let target = Instant::now() + Duration::from_micros(100);
+    while Instant::now() < target {
+        std::hint::spin_loop();
+    }
 
     let complete_time = Instant::now();
     let e2e_us = complete_time.duration_since(ingest_time).as_micros() as u64;
