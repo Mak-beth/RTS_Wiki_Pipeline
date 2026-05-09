@@ -15,8 +15,8 @@ use std::time::{Duration, Instant};
 
 pub fn run_worker_loop(
     id:           usize,
-    chan_human:   Receiver<(String, Instant)>,
-    chan_bot:     Receiver<(String, Instant)>,
+    chan_human:   Receiver<(String, Instant, Instant)>,
+    chan_bot:     Receiver<(String, Instant, Instant)>,
     chan_metrics: crossbeam_channel::Sender<LatencySample>,
     leaderboard:  Arc<dyn Leaderboard>,
     shutdown:     Arc<AtomicBool>,
@@ -27,20 +27,20 @@ pub fn run_worker_loop(
         }
 
         // Biased select: human channel is always checked first.
-        let (raw, ingest_time, was_human) = select! {
+        let (raw, ingest_time, enqueue_time, was_human) = select! {
             recv(chan_human) -> msg => match msg {
-                Ok((r, t)) => (r, t, true),
-                Err(_)     => break,
+                Ok((r, t, e)) => (r, t, e, true),
+                Err(_)        => break,
             },
             recv(chan_bot) -> msg => match msg {
-                Ok((r, t)) => (r, t, false),
-                Err(_)     => break,
+                Ok((r, t, e)) => (r, t, e, false),
+                Err(_)        => break,
             },
             default(Duration::from_micros(100)) => continue,
         };
 
         let dequeue_time   = Instant::now();
-        let expected_start = dequeue_time;
+        let expected_start = enqueue_time;
 
         if let Ok(event) = parse_event(&raw) {
             leaderboard.record(event.server_name);

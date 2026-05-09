@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 
 pub fn run(
     ring:       Arc<BoundedRing>,
-    chan_human: Sender<(String, Instant)>,
-    chan_bot:   Sender<(String, Instant)>,
+    chan_human: Sender<(String, Instant, Instant)>,
+    chan_bot:   Sender<(String, Instant, Instant)>,
     shutdown:   Arc<AtomicBool>,
 ) {
     loop {
@@ -61,7 +61,8 @@ pub fn run(
             continue;
         }
 
-        let payload = (data, ingest_time);
+        let enqueue_time = Instant::now();
+        let payload = (data, ingest_time, enqueue_time);
         if is_bot {
             if chan_bot.try_send(payload).is_err() {
                 tracing::warn!(target: "channel_full", priority = "bot");

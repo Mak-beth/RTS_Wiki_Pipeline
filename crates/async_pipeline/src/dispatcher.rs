@@ -7,8 +7,8 @@ use tokio::sync::mpsc::Sender;
 
 pub async fn run(
     ring:       Arc<BoundedRing>,
-    chan_human: Sender<(String, Instant)>,
-    chan_bot:   Sender<(String, Instant)>,
+    chan_human: Sender<(String, Instant, Instant)>,
+    chan_bot:   Sender<(String, Instant, Instant)>,
 ) {
     loop {
         match ring.pop().await {
@@ -48,14 +48,15 @@ pub async fn run(
                     continue;
                 }
 
+                let enqueue_time = Instant::now();
                 match priority {
                     Priority::Human => {
-                        if chan_human.try_send((data, ingest_time)).is_err() {
+                        if chan_human.try_send((data, ingest_time, enqueue_time)).is_err() {
                             tracing::warn!("human channel full, dropping event");
                         }
                     }
                     Priority::Bot => {
-                        if chan_bot.try_send((data, ingest_time)).is_err() {
+                        if chan_bot.try_send((data, ingest_time, enqueue_time)).is_err() {
                             tracing::warn!("bot channel full, dropping event");
                         }
                     }

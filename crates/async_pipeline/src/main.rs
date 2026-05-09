@@ -87,9 +87,9 @@ async fn main() {
     let ring = Arc::new(ingestion::BoundedRing::new(args.channel_capacity));
 
     let (chan_human_tx, chan_human_rx) =
-        tokio::sync::mpsc::channel::<(String, std::time::Instant)>(args.channel_capacity);
+        tokio::sync::mpsc::channel::<(String, std::time::Instant, std::time::Instant)>(args.channel_capacity);
     let (chan_bot_tx, chan_bot_rx) =
-        tokio::sync::mpsc::channel::<(String, std::time::Instant)>(args.channel_capacity);
+        tokio::sync::mpsc::channel::<(String, std::time::Instant, std::time::Instant)>(args.channel_capacity);
     let (chan_metrics_tx, chan_metrics_rx) =
         tokio::sync::mpsc::channel::<rts_core::LatencySample>(4096);
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();

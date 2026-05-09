@@ -11,7 +11,7 @@ use tokio::sync::{mpsc, Mutex};
 /// can receive concurrently once the previous item has been dequeued.
 pub async fn run_human_worker(
     id:           usize,
-    chan_human:   Arc<Mutex<mpsc::Receiver<(String, Instant)>>>,
+    chan_human:   Arc<Mutex<mpsc::Receiver<(String, Instant, Instant)>>>,
     chan_metrics: mpsc::Sender<LatencySample>,
     leaderboard:  Arc<dyn Leaderboard>,
 ) {
@@ -21,35 +21,36 @@ pub async fn run_human_worker(
             rx.recv().await
         };
 
-        let (raw, ingest_time) = match item {
+        let (raw, ingest_time, enqueue_time) = match item {
             Some(v) => v,
             None    => break, // sender dropped — pipeline shutting down
         };
 
-        process(raw, ingest_time, true, id, &chan_metrics, &leaderboard).await;
+        process(raw, ingest_time, enqueue_time, true, id, &chan_metrics, &leaderboard).await;
     }
 }
 
 pub async fn run_bot_worker(
-    mut chan_bot:  mpsc::Receiver<(String, Instant)>,
+    mut chan_bot:  mpsc::Receiver<(String, Instant, Instant)>,
     chan_metrics:  mpsc::Sender<LatencySample>,
     leaderboard:   Arc<dyn Leaderboard>,
 ) {
-    while let Some((raw, ingest_time)) = chan_bot.recv().await {
-        process(raw, ingest_time, false, 0, &chan_metrics, &leaderboard).await;
+    while let Some((raw, ingest_time, enqueue_time)) = chan_bot.recv().await {
+        process(raw, ingest_time, enqueue_time, false, 0, &chan_metrics, &leaderboard).await;
     }
 }
 
 async fn process(
     raw:          String,
     ingest_time:  Instant,
+    enqueue_time: Instant,
     was_human:    bool,
     worker_id:    usize,
     chan_metrics: &mpsc::Sender<LatencySample>,
     leaderboard:  &Arc<dyn Leaderboard>,
 ) {
     let dequeue_time   = Instant::now();
-    let expected_start = dequeue_time;
+    let expected_start = enqueue_time;
 
     // Re-parse to get a borrowed WikiEvent for the leaderboard update.
     if let Ok(event) = parse_event(&raw) {

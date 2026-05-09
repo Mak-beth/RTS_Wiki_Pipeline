@@ -83,9 +83,9 @@ fn main() {
 
     // ── 5. Channels ───────────────────────────────────────────────────────────
     let (human_tx, human_rx) =
-        crossbeam_channel::bounded::<(String, Instant)>(args.channel_capacity);
+        crossbeam_channel::bounded::<(String, Instant, Instant)>(args.channel_capacity);
     let (bot_tx, bot_rx) =
-        crossbeam_channel::bounded::<(String, Instant)>(args.channel_capacity);
+        crossbeam_channel::bounded::<(String, Instant, Instant)>(args.channel_capacity);
     let (metrics_tx, metrics_rx) =
         crossbeam_channel::bounded::<rts_core::LatencySample>(4096);
 
@@ -149,7 +149,7 @@ fn main() {
 
     // Bot worker — never-ready dummy human receiver so select! skips it
     {
-        let dummy_rx:    crossbeam_channel::Receiver<(String, Instant)> =
+        let dummy_rx:    crossbeam_channel::Receiver<(String, Instant, Instant)> =
             crossbeam_channel::never();
         let bot_rx       = bot_rx.clone();
         let metrics_tx   = metrics_tx.clone();
