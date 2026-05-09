@@ -39,6 +39,36 @@ impl BoundedRing {
     }
 }
 
+/// THREAD: mock_ingestion
+///
+/// Deterministic mock that replaces the live SSE stream.  Produces events at
+/// `events_per_second` using `MockStream` (seed 42) and exits after `duration`
+/// or when `shutdown` is set, whichever comes first.
+pub fn run_mock(
+    ring:               Arc<BoundedRing>,
+    events_per_second:  u64,
+    duration:           Duration,
+    shutdown:           Arc<AtomicBool>,
+) {
+    let interval = Duration::from_micros(1_000_000 / events_per_second.max(1));
+    let mut mock = rts_core::MockStream::new();
+    let start    = Instant::now();
+
+    while start.elapsed() < duration && !shutdown.load(Ordering::Relaxed) {
+        let json        = mock.next_event();
+        let ingest_time = Instant::now();
+        EVENTS_INGESTED.fetch_add(1, Ordering::Relaxed);
+
+        let dropped = ring.push((json, ingest_time));
+        if dropped {
+            let cnt = OVERFLOW_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+            tracing::warn!(target: "overflow", overflow_count = cnt);
+        }
+
+        std::thread::sleep(interval);
+    }
+}
+
 // THREAD: watchdog
 // Shares a Mutex<bool> + Condvar with the ingestion thread.
 // Ingestion calls notify_one() on each received event.

@@ -49,6 +49,35 @@ impl BoundedRing {
     }
 }
 
+/// Deterministic mock ingestion — replaces the live SSE stream with a
+/// seeded synthetic generator for reproducible benchmark runs.
+///
+/// Produces events at `events_per_second` and exits cleanly after `duration`.
+/// Uses the same ring push / overflow accounting as the live `run` function.
+pub async fn run_mock(
+    ring:               Arc<BoundedRing>,
+    events_per_second:  u64,
+    duration:           Duration,
+) {
+    let interval = Duration::from_micros(1_000_000 / events_per_second.max(1));
+    let mut mock = rts_core::MockStream::new();
+    let start    = Instant::now();
+
+    while start.elapsed() < duration {
+        let json        = mock.next_event();
+        let ingest_time = Instant::now();
+        EVENTS_INGESTED.fetch_add(1, Ordering::Relaxed);
+
+        let dropped = ring.push((json, ingest_time)).await;
+        if dropped {
+            let cnt = OVERFLOW_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+            tracing::warn!(target: "overflow", overflow_count = cnt);
+        }
+
+        tokio::time::sleep(interval).await;
+    }
+}
+
 pub async fn run(config: IngestionConfig, ring: Arc<BoundedRing>) {
     let client = Client::builder()
         .user_agent("rts_wiki_pipeline/0.1 (assignment; contact via github)")

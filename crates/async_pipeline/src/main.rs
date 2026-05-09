@@ -42,6 +42,11 @@ struct Args {
     /// If set, capture up to 500 raw SSE lines to this file for benchmarks.
     #[arg(long)]
     capture_sample: Option<String>,
+
+    /// Run with a deterministic mock stream instead of the live Wikipedia SSE
+    /// stream.  Produces 2000 events/second with seed 42 — identical across runs.
+    #[arg(long)]
+    mock: bool,
 }
 
 // With track-alloc, use a single-thread runtime so the cooperative scheduler
@@ -99,14 +104,22 @@ async fn main() {
         Arc::new(tokio::sync::Mutex::new(chan_human_rx));
 
     // ── 5. Spawn tasks ────────────────────────────────────────────────────────
-    tokio::spawn(ingestion::run(
-        ingestion::IngestionConfig {
-            sse_url:      args.sse_url.clone(),
-            capacity:     args.channel_capacity,
-            capture_path: args.capture_sample.clone(),
-        },
-        Arc::clone(&ring),
-    ));
+    if args.mock {
+        let eps: u64 = 2000;
+        eprintln!("[ingestion] mode = mock ({eps} eps)");
+        let dur = Duration::from_secs(args.duration.unwrap_or(60));
+        tokio::spawn(ingestion::run_mock(Arc::clone(&ring), eps, dur));
+    } else {
+        eprintln!("[ingestion] mode = live (stream rate)");
+        tokio::spawn(ingestion::run(
+            ingestion::IngestionConfig {
+                sse_url:      args.sse_url.clone(),
+                capacity:     args.channel_capacity,
+                capture_path: args.capture_sample.clone(),
+            },
+            Arc::clone(&ring),
+        ));
+    }
 
     tokio::spawn(dispatcher::run(
         Arc::clone(&ring),

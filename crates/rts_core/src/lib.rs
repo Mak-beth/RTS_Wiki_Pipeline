@@ -2,6 +2,7 @@ pub mod event;
 pub mod jitter_baseline;
 pub mod leaderboard;
 pub mod metrics;
+pub mod mock_stream;
 pub mod parser;
 
 #[cfg(feature = "track-alloc")]
@@ -12,4 +13,5 @@ pub use event::{Priority, WikiEvent};
 pub use jitter_baseline::{measure_os_jitter, OsJitterReport};
 pub use leaderboard::{AtomicLeaderboard, Leaderboard, MutexLeaderboard, RwLockLeaderboard};
 pub use metrics::{HistogramAggregator, LatencySample};
+pub use mock_stream::{generate_event, MockStream};
 pub use parser::{parse_event, ParseError};

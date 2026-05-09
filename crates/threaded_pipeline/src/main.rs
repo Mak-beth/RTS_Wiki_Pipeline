@@ -40,6 +40,12 @@ struct Args {
 
     #[arg(long)]
     capture_sample: Option<String>,
+
+    /// Run with a deterministic mock stream instead of the live Wikipedia SSE
+    /// stream.  Produces 2000 events/second with seed 42 — identical across runs.
+    /// In mock mode the watchdog thread is not spawned (no network to watch).
+    #[arg(long)]
+    mock: bool,
 }
 
 fn main() {
@@ -92,34 +98,50 @@ fn main() {
     // ── 6. Spawn threads ──────────────────────────────────────────────────────
     let mut handles = Vec::new();
 
-    // Watchdog thread
-    {
-        let condvar    = Arc::clone(&condvar);
-        let reconnect  = Arc::clone(&reconnect_flag);
-        let shutdown   = Arc::clone(&shutdown);
+    if args.mock {
+        // Mock mode: one ingestion thread with a seeded synthetic generator.
+        // Watchdog is not needed — there is no network connection to monitor.
+        let eps: u64 = 2000;
+        eprintln!("[ingestion] mode = mock ({eps} eps)");
+        let dur      = Duration::from_secs(args.duration.unwrap_or(60));
+        let ring     = Arc::clone(&ring);
+        let shutdown = Arc::clone(&shutdown);
         handles.push(std::thread::Builder::new()
-            .name("watchdog".into())
-            .spawn(move || ingestion::run_watchdog(condvar, reconnect, shutdown))
-            .expect("failed to spawn watchdog"));
-    }
+            .name("mock_ingestion".into())
+            .spawn(move || ingestion::run_mock(ring, eps, dur, shutdown))
+            .expect("failed to spawn mock ingestion"));
+    } else {
+        eprintln!("[ingestion] mode = live (stream rate)");
 
-    // Ingestion thread
-    {
-        let ring       = Arc::clone(&ring);
-        let condvar    = Arc::clone(&condvar);
-        let reconnect  = Arc::clone(&reconnect_flag);
-        let shutdown   = Arc::clone(&shutdown);
-        handles.push(std::thread::Builder::new()
-            .name("ingestion".into())
-            .spawn(move || ingestion::run_ingestion(
-                ingestion::IngestionConfig {
-                    sse_url:      args.sse_url.clone(),
-                    capacity:     args.channel_capacity,
-                    capture_path: args.capture_sample.clone(),
-                },
-                ring, condvar, reconnect, shutdown,
-            ))
-            .expect("failed to spawn ingestion"));
+        // Watchdog thread
+        {
+            let condvar   = Arc::clone(&condvar);
+            let reconnect = Arc::clone(&reconnect_flag);
+            let shutdown  = Arc::clone(&shutdown);
+            handles.push(std::thread::Builder::new()
+                .name("watchdog".into())
+                .spawn(move || ingestion::run_watchdog(condvar, reconnect, shutdown))
+                .expect("failed to spawn watchdog"));
+        }
+
+        // Ingestion thread
+        {
+            let ring      = Arc::clone(&ring);
+            let condvar   = Arc::clone(&condvar);
+            let reconnect = Arc::clone(&reconnect_flag);
+            let shutdown  = Arc::clone(&shutdown);
+            handles.push(std::thread::Builder::new()
+                .name("ingestion".into())
+                .spawn(move || ingestion::run_ingestion(
+                    ingestion::IngestionConfig {
+                        sse_url:      args.sse_url.clone(),
+                        capacity:     args.channel_capacity,
+                        capture_path: args.capture_sample.clone(),
+                    },
+                    ring, condvar, reconnect, shutdown,
+                ))
+                .expect("failed to spawn ingestion"));
+        }
     }
 
     // Dispatcher thread
