@@ -94,7 +94,10 @@ pub async fn run_mock(
                 );
             }
 
-            tokio::time::sleep(interval).await;
+            let target = Instant::now() + interval;
+            while Instant::now() < target {
+                std::hint::spin_loop();
+            }
             continue;
         } else {
             // Reset watchdog state once we leave the silence window.
@@ -112,7 +115,10 @@ pub async fn run_mock(
             tracing::warn!(target: "overflow", overflow_count = cnt);
         }
 
-        tokio::time::sleep(interval).await;
+        let target = Instant::now() + interval;
+        while Instant::now() < target {
+            std::hint::spin_loop();
+        }
     }
 }
 

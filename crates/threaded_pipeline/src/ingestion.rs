@@ -65,7 +65,10 @@ pub fn run_mock(
             tracing::warn!(target: "overflow", overflow_count = cnt);
         }
 
-        std::thread::sleep(interval);
+        let target = Instant::now() + interval;
+        while Instant::now() < target {
+            std::hint::spin_loop();
+        }
     }
 }
 
