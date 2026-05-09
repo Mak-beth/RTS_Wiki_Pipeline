@@ -5,6 +5,7 @@ members = [
     "crates/async_pipeline",
     "crates/threaded_pipeline",
     "crates/benches",
+    "crates/compare_pipelines",
 ]
 
 [workspace.dependencies]
