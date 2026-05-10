@@ -1,9 +1,21 @@
-target/
+# Build output
+/target/
+
+# Large log files (JSONL can be hundreds of MB)
 logs/*.jsonl
-logs/*.log
-.DS_Store
-.idea/
-.vscode/
+
+# Archive files
+*.zip
+*.tar.gz
+
+# Python
 __pycache__/
 *.pyc
 .venv/
+
+# Criterion HTML reports (large, regeneratable)
+reports/criterion/
+
+# OS
+.DS_Store
+Thumbs.db
