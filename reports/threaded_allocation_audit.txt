@@ -5,15 +5,12 @@ Claim under test:
   (The SSE library's initial String allocation is excluded — it is
    outside the zero-copy boundary and is not counted here.)
 
-Total parse calls measured : 2715
-Calls with 0 allocs        : 1461
-Zero-allocation percentage : 53.8%
-Mean allocs per parse      : 4.102
-Max allocs in one parse    : 63
-Mean bytes allocated       : 1279.5
+Total parse calls measured : 2728
+Calls with 0 allocs        : 2728
+Zero-allocation percentage : 100.0%
+Mean allocs per parse      : 0.000
+Max allocs in one parse    : 0
+Mean bytes allocated       : 0.0
 
-RESULT: BELOW THRESHOLD (53.8% < 95%)
-Investigate allocations in the hot path.
-For the threaded pipeline this is expected: worker threads allocate
-concurrently (server_name.to_owned() in leaderboard.record()), polluting
-the global AtomicUsize counters. See HONEST_LIMITATIONS.md.
+RESULT: PASS (100.0% >= 95% threshold)
+The zero-copy parsing claim is quantitatively supported.

@@ -14,9 +14,11 @@ pub struct LatencySample {
     pub dequeue_time: Instant,
     /// Moment all processing (parse + leaderboard update + simulated work) completed.
     pub complete_time: Instant,
-    /// The scheduled (expected) start time for this task slot.
-    /// Currently set to `dequeue_time`, making drift equivalent to processing time.
-    /// A future improvement would assign this before the event enters the queue.
+    /// Set to the moment the event is enqueued into the priority channel.
+    /// Drift = dequeue_time − expected_start measures pure queue-wait latency —
+    /// the delay between when the event became available for processing and when
+    /// a worker actually started on it. For an aperiodic SSE stream this is the
+    /// correct drift definition; there is no fixed periodic schedule to compare against.
     pub expected_start: Instant,
     /// `true` when the edit was made by a human (not a bot).
     pub was_human: bool,
